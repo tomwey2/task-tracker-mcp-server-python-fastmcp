@@ -1,6 +1,6 @@
 """
-MCP-Server für das taskapp-backend (mit Authentifizierung).
-Verwendet das mcp-python-sdk (STDIO).
+Model Context Protocol (MCP) server for my task tracker backend (with authentication).
+Uses the mcp-python-sdk (STDIO).
 """
 
 import os
@@ -36,9 +36,9 @@ if not TASKAPP_PASSWORD:
 # --- 2. Authentifizierungs-Logik ---
 def create_authenticated_client() -> httpx.Client:
     """
-    Diese Funktion wird EINMAL beim Start des Servers aufgerufen.
-    Sie meldet sich beim Backend an, erstellt einen Client, der den Token
-    automatisch für alle Anfragen verwendet, und ruft die ID des Agenten ab.
+    This function is called ONCE when the server starts.
+    It logs into the backend, creates a client that automatically uses the token for all requests,
+    and retrieves the agent's ID.
     """
     global AGENT_USER_ID
     print(
@@ -129,7 +129,10 @@ def _get_tasks(project_id: int, assigned_user_id: int) -> Dict[str, Any]:
 
 
 def _get_project_id_by_name(project_name: str) -> int:
-    """Helper to find a project ID by its name. Raises ValueError or httpx.HTTPStatusError on failure."""
+    """
+    Helper to find a project ID by its name. Raises ValueError or httpx.HTTPStatusError on
+    failure.
+    """
     project_response = client.get("/projects", params={"name": project_name})
     project_response.raise_for_status()
     projects = project_response.json()
@@ -173,7 +176,7 @@ class GetMyTasksOfProjectParams(BaseModel):
 @mcp.tool()
 def get_tasks(params: GetTasksParams) -> Dict[str, Any]:
     """
-    Ruft die Aufgaben für einen bestimmten Benutzer innerhalb eines bestimmten Projekts ab.
+    Retrieves the tasks for a specific user within a specific project.
     """
     print("Tool called: get_tasks", file=sys.stderr)
     return _get_tasks(
@@ -184,7 +187,7 @@ def get_tasks(params: GetTasksParams) -> Dict[str, Any]:
 @mcp.tool()
 def get_tasks_of_project(params: GetTasksOfProjectParams) -> Dict[str, Any]:
     """
-    Ruft die Aufgaben für einen bestimmten Benutzer ab, indem nach dem Projektnamen gesucht wird.
+    Retrieves the tasks for a specific user by searching for the project name.
     """
     print("Tool called: get_tasks_of_project", file=sys.stderr)
     try:
@@ -202,8 +205,8 @@ def get_tasks_of_project(params: GetTasksOfProjectParams) -> Dict[str, Any]:
 @mcp.tool()
 def get_my_tasks(params: GetMyTasksParams) -> Dict[str, Any]:
     """
-    Ruft MEINE Aufgaben für ein bestimmtes Projekt ab.
-    Verwendet die ID des authentifizierten Agenten.
+    Retrieves MY tasks (those of the agent) for a specific project.
+    Uses the ID of the authenticated agent.
     """
     print("Tool called: get_my_tasks", file=sys.stderr)
     return _get_tasks(project_id=params.project_id, assigned_user_id=AGENT_USER_ID)
@@ -212,8 +215,8 @@ def get_my_tasks(params: GetMyTasksParams) -> Dict[str, Any]:
 @mcp.tool()
 def get_my_tasks_of_project(params: GetMyTasksOfProjectParams) -> Dict[str, Any]:
     """
-    Ruft MEINE Aufgaben für ein bestimmtes Projekt ab, indem nach dem Projektnamen gesucht wird.
-    Verwendet die ID des authentifizierten Agenten.
+    Retrieves MY tasks (those of the agent) for a specific project by searching for the project name.
+    Uses the ID of the authenticated agent.
     """
     print("Tool called: get_my_tasks_of_project", file=sys.stderr)
     try:
