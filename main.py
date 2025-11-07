@@ -88,40 +88,23 @@ mcp = FastMCP("TaskApp Backend MCP Server")
 client = create_authenticated_client()
 
 
-# --- 4. Pydantic-Modell für Parameter ---
-class GetTasksParams(BaseModel):
-    project_id: Optional[int] = Field(
-        None, description="Optional: ID of the project to filter by."
-    )
-    assigned_user_id: Optional[int] = Field(
-        None, description="Optional: ID of the user to whom the tasks are assigned."
-    )
-
-
-# --- 5. Tool-Definition ---
-@mcp.tool()
-def get_tasks(params: GetTasksParams) -> Dict[str, Any]:
+def _get_tasks(
+    project_id: Optional[int] = None, assigned_user_id: Optional[int] = None
+) -> Dict[str, Any]:
     """
-    Ruft Aufgaben für ein bestimmtes Projekt ab.
-    Wenn keine assigned_user_id angegeben wird, werden die Aufgaben des aktuellen Benutzers (Agent) abgerufen.
-    Die Authentifizierung erfolgt automatisch.
+    Core logic to retrieve tasks from the backend.
+    This function is not a tool and can be called from other tools.
     """
-    print("Tool called: get_tasks", file=sys.stderr)
     try:
         query_params = {}
-        if params.project_id is not None:
-            query_params["projectId"] = params.project_id
+        if project_id is not None:
+            query_params["projectId"] = project_id
 
-        user_id_to_query = params.assigned_user_id
-        if user_id_to_query is None:
-            user_id_to_query = AGENT_USER_ID
-            print(
-                f"Keine assigned_user_id angegeben, verwende eigene ID: {AGENT_USER_ID}",
-                file=sys.stderr,
-            )
-
-        if user_id_to_query is not None:
-            query_params["assignedToUserId"] = user_id_to_query
+        if assigned_user_id is None:
+            query_params["assignedToUserId"] = AGENT_USER_ID
+        elif assigned_user_id != -1:
+            query_params["assignedToUserId"] = assigned_user_id
+        # wenn assigned_user_id == -1 dann wird nicht auf user gefiltert
 
         # Abfrage der Tasks erfolgt z.B. mit: GET /api/tasks?projectId=1&assignedToUser=3
         # Der 'client' hat bereits den Bearer-Token im Header.
@@ -137,6 +120,59 @@ def get_tasks(params: GetTasksParams) -> Dict[str, Any]:
         }
     except Exception as e:
         return {"error": f"Interner MCP-Fehler: {str(e)}"}
+
+
+# --- 4. Pydantic-Modell für Parameter ---
+class GetTasksParams(BaseModel):
+    project_id: Optional[int] = Field(
+        None, description="Optional: ID of the project to filter by."
+    )
+    assigned_user_id: Optional[int] = Field(
+        None, description="Optional: ID of the user to whom the tasks are assigned."
+    )
+
+
+class GetTasksOfProjectParams(BaseModel):
+    project_name: str = Field(
+        ..., description="The name of the project for which to retrieve tasks."
+    )
+
+
+# --- 5. Tool-Definition ---
+@mcp.tool()
+def get_tasks(params: GetTasksParams) -> Dict[str, Any]:
+    """
+    Ruft Aufgaben für ein bestimmtes Projekt ab.
+    Wenn keine assigned_user_id angegeben wird, werden die Aufgaben des aktuellen Benutzers (Agent) abgerufen.
+    Die Authentifizierung erfolgt automatisch.
+    """
+    print("Tool called: get_tasks", file=sys.stderr)
+    return _get_tasks(
+        project_id=params.project_id, assigned_user_id=params.assigned_user_id
+    )
+
+
+@mcp.tool()
+def get_tasks_of_project(params: GetTasksOfProjectParams) -> Dict[str, Any]:
+    """
+    Ruft Aufgaben für ein bestimmtes Projekt ab.
+    """
+    print("Tool called: get_tasks_of_project", file=sys.stderr)
+    try:
+        project_response = client.get("/projects", params={"name": params.project_name})
+        project_response.raise_for_status()
+        projects = project_response.json()
+        if not projects:
+            return {"error": f"Project with name '{params.project_name}' not found."}
+        project_id = projects[0]["id"]
+        return _get_tasks(project_id=project_id)
+    except httpx.HTTPStatusError as e:
+        return {
+            "error": f"Backend error while fetching project: {e.response.status_code}",
+            "details": e.response.text,
+        }
+    except Exception as e:
+        return {"error": f"Internal MCP error: {str(e)}"}
 
 
 # Add an addition tool
